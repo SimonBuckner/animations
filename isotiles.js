@@ -1,81 +1,134 @@
 const canvasSketch = require('canvas-sketch');
 const math = require('canvas-sketch-util/math');
-const random = require('canvas-sketch-util/random');
 const color = require('canvas-sketch-util/color');
-const rgbaToHex = require('canvas-sketch-util/lib/rgba-to-hex');
 const tweakpane = require('tweakpane');
+const intersectLineCircle = require('canvas-sketch-util/lib/clip/clip-line-to-circle');
+
+// const random = require('canvas-sketch-util/random');
+// const rgbaToHex = require('canvas-sketch-util/lib/rgba-to-hex');
 
 const settings = {
   dimensions: [1080, 1080],
   animate: true,
 };
 
-const params = {
-  tiles: [],
-  rows: 31,
-  cols: 15,
-  y_speed: 0.1,
-  y_offset: 0,
-  y_bump: 1,
+const tileTop = {
+  plots: [
+    [0, -1],
+    [1, 0],
+    [0, 1],
+    [-1, 0],
+  ],
+  fillStyle: color.style([255, 0, 0]),
+  strokeStyle: color.style([0, 0, 0]),
+};
+
+const tileLeft = {
+  plots: [
+    [-1, -1],
+    [-1, -0.6],
+    [0, 0.4],
+    [0, 0],
+  ],
+  fillStyle: color.style([100, 100, 100]),
+  strokeStyle: color.style([0, 0, 0]),
+};
+
+const tileRight = {
+  plots: [
+    [1, -1],
+    [1, -0.6],
+    [0, 0.4],
+    [0, 0],
+  ],
+  fillStyle: color.style([200, 200, 200]),
+  strokeStyle: color.style([0, 0, 0]),
+};
+
+let tiles = [];
+
+const state = {
+  rows: 40,
+  cols: 10,
+
+  originX: 238,
+  originY: 1,
+
+  speedY: 0.1,
+  speedC: 5,
+  speedSin: 3.5,
+
+  fadeBegin: 20,
+  fadeFull: 35,
+
+  offsetY: 0,
   color: 0,
-  c_speed: 5,
-  s_speed: 4,
-  z_speed: 1,
-  begin_fade: 15,
-  full_fade: 25,
+
+  fillTops: true,
+  fillSides: true,
+
+  background: color.style([11, 5, 38]),
 };
 
 const sketch = () => {
-  const num_tiles = params.rows * params.cols;
-  params.tiles = Array(num_tiles);
+
+  const numTiles = state.rows * state.cols;
+  tiles = Array(numTiles);
 
   return ({ context, width, height, frame }) => {
-    context.fillStyle = 'white';
+    context.fillStyle = state.background;
     context.fillRect(0, 0, width, height);
 
-    params.y_offset += params.y_speed;
+    originX = width + state.originX;
+    originY = state.originY;
 
-    if (params.y_offset > params.y_bump) {
-      params.y_offset = 0;
-      bump_tiles(frame);
+    // Move tileHeighte Y offset by tileHeighter speed to animate tile placement
+    // Positive values move tiles from upper right to lower left
+    state.offsetY += state.speedY;
+
+    // Remove tileHeighte left most row of tiles and create a new right most tile.
+    if (state.offsetY > 1) {
+      state.offsetY = 0;
+      bumpTiles(frame);
     };
 
-    const num_tiles = params.rows * params.cols;
+    // Build initial array of tiles
+    const numTiles = state.rows * state.cols;
 
-    for (let i = 0; i < num_tiles; i++) {
-      const x = i % params.cols;
-      const y = Math.floor(i / params.cols);
-      if (params.tiles[i]) {
-        params.tiles[i].draw(context, width + 100, 150, x, y + params.y_offset);
+    for (let i = 0; i < numTiles; i++) {
+      const x = i % state.cols;
+      const y = Math.floor(i / state.cols);
+      if (tiles[i]) {
+        tiles[i].draw(context, originX, originY, x, y + state.offsetY);
       }
     };
   };
 };
 
-const bump_tiles = (frame) => {
-  const num_tiles = params.rows * params.cols;
+const bumpTiles = (frame) => {
+  const numTiles = state.rows * state.cols;
 
-  const keep_rows = num_tiles - (num_tiles % params.cols);
+  const keep_rows = numTiles - (numTiles % state.cols);
   for (let i = keep_rows - 1; i >= 0; i--) {
-    params.tiles[i + params.cols] = params.tiles[i];
+    tiles[i + state.cols] = tiles[i];
   };
 
-  params.color += params.c_speed;
-  const z = Math.sin(math.degToRad(frame * params.z_speed)); // * 40;
+  state.color += state.speedC;
+  const z = Math.sin(math.degToRad(frame));
 
-  if (params.color <= 0 || params.color >= 255) { params.c_speed *= -1; }
+  if (state.color <= 0 || state.color >= 255) { state.speedC *= -1; }
 
-  const s = Math.sin(math.degToRad(frame * params.s_speed))
-  const s1 = Math.round(math.mapRange(s, -1, 1, 0, params.cols - 1));
-  const s2 = params.cols - s1 - 1;
+  const s = Math.sin(math.degToRad(frame * state.speedSin))
+  const s1 = Math.round(math.mapRange(s, -1, 1, 0, state.cols - 1));
+  const s2 = state.cols - s1 - 1;
 
-  for (let i = params.cols - 1; i >= 0; i--) {
+  for (let i = state.cols - 1; i >= 0; i--) {
     if (i >= s1 && i <= s2) {
-      params.tiles[i] = new Tile(255 - params.color, z * 40);
+      tiles[i] = new Tile(255 - state.color, z * 60);
     } else if (i >= s2 && i <= s1) {
-      params.tiles[i] = new Tile(255 - params.color, z * 40);
+      tiles[i] = new Tile(255 - state.color, z * 60);
     } else {
-      params.tiles[i] = new Tile(params.color, z * 40);
+      tiles[i] = new Tile(state.color, (z * 60) * -1);
     };
   };
 };
@@ -84,91 +137,107 @@ class Tile {
   constructor(c, z) {
     this.c = c;
     this.z = z;
-    // this.z = random.range(-10, 10);
-
   }
 
-  draw(context, ox, oy, tx, ty) {
+  draw(context, originX, originY, tileX, tileY) {
 
-    const tw = 100 / 2;
-    const th = 50 / 2;
+    const tilewidth = 100 / 2;
+    const tileHeight = 50 / 2;
 
-    const x = ox + (tx * tw) - (ty * tw);
-    const y = oy + (tx * th) + (ty * th);
-
-    const xl = -50;   // left
-    const x0 = 0;     // middle
-    const xr = 50;    // right
-
-    const yt = -25;   // top
-    const y0 = 0;     // middle
-    const yb = 25;    // bottom
-
-    const ysb = 10;   // side bottom
-    const ybb = 35;   // bottom bottom
+    const x = originX + (tileX * tilewidth) - (tileY * tilewidth);
+    const y = originY + (tileX * tileHeight) + (tileY * tileHeight);
 
     let alpha = 1.0;
-    const range = params.full_fade - params.begin_fade;
-    const ay = ty - params.begin_fade;
+    const range = state.fadeFull - state.fadeBegin;
+    const ay = tileY - state.fadeBegin;
 
-    if (ty >= params.begin_fade) {
+    if (tileY >= state.fadeBegin) {
       alpha = 1 - (ay / range);
     }
-    if (ty >= params.full_fade) {
+    if (tileY >= state.fadeFull) {
       alpha = 0;
     }
+
     context.save();
     context.globalAlpha = alpha;
     context.translate(x, y);
     context.translate(0, this.z);
 
-    // sides of tile
-    context.beginPath();
-    context.moveTo(xl, y0);   // left middle
-    context.lineTo(xl, ysb);  // left side-bottom
-    context.lineTo(x0, ybb);  // middle bottom-bottom
-    context.lineTo(xr, ysb);  // right side-bottom
-    context.lineTo(xr, y0);   // right middle
-    context.moveTo(x0, yb);   // middle bottom 
-    context.lineTo(x0, ybb);  // middle bottom-bottom
-    context.stroke();
-
-    // top of tile
-    context.beginPath();
-    context.moveTo(x0, yt);   // middle top
-    context.lineTo(xr, y0);   // right middle
-    context.lineTo(x0, yb);   // middle bottom
-    context.lineTo(xl, y0);   // left middle
-    context.lineTo(x0, yt);   // middle top
-    context.closePath();
-    context.fillStyle = color.style([this.c, 0, 0]);
-    context.fill();
-
-    context.beginPath();
-    context.moveTo(x0, yt);   // middle top
-    context.lineTo(xr, y0);   // right middle
-    context.lineTo(x0, yb);   // middle bottom
-    context.lineTo(xl, y0);   // left middle
-    context.lineTo(x0, yt);   // middle top
-    context.closePath();
-    context.stroke();
+    context.translate(0, 25);
+    if (state.fillSides) {
+      fillPoly(context, tileLeft.fillStyle, 100, 50, ...tileLeft.plots);
+      fillPoly(context, tileRight.fillStyle, 100, 50, ...tileRight.plots);
+    } else {
+      drawPoly(context, 100, 50, ...tileLeft.plots);
+      drawPoly(context, 100, 50, ...tileRight.plots);
+    }
+    context.translate(0, -25);
+    if (state.fillTops) {
+      fillPoly(context, color.style([this.c, 0, 0]), 100, 50, ...tileTop.plots);
+    } else {
+      drawPoly(context, 100, 50, ...tileTop.plots);
+    }
 
     context.restore();
   }
 };
 
+const drawPoly = (context, scaleX, scaleY, ...plots) => {
+
+  if (plots.length < 2) { return; };
+
+  context.beginPath();
+  const x = plots[0][0] * scaleX * 0.5;
+  const y = plots[0][1] * scaleY * 0.5;
+
+  context.moveTo(x, y);
+  for (let i = 1; i < plots.length; i++) {
+    const x = plots[i][0] * scaleX * 0.5;
+    const y = plots[i][1] * scaleY * 0.5;
+    context.lineTo(x, y);
+  }
+  context.closePath();
+  context.stroke();
+};
+
+const fillPoly = (context, color, scaleX, scaleY, ...plots) => {
+
+  if (plots.length < 2) { return; };
+
+  context.beginPath();
+
+  const x = plots[0][0] * scaleX * 0.5;
+  const y = plots[0][1] * scaleY * 0.5;
+
+  context.moveTo(x, y);
+  for (let i = 1; i < plots.length; i++) {
+    const x = plots[i][0] * scaleX * 0.5;
+    const y = plots[i][1] * scaleY * 0.5;
+    context.lineTo(x, y);
+  }
+  context.fillStyle = color;
+  context.fill();
+  context.linewidth = 1;
+  context.strokeStyle = 'black';
+  context.stroke();
+
+};
 
 const createPane = () => {
   const pane = new tweakpane.Pane();
   let folder;
 
   folder = pane.addFolder({ title: "Tiles" });
-  folder.addInput(params, "y_speed", { min: 0.01, max: 1, step: 0.01 });
-  folder.addInput(params, "c_speed", { min: 1, max: 255, step: 1 });
-  folder.addInput(params, "z_speed", { min: 1, max: 255, step: 1 });
-  folder.addInput(params, "s_speed", { min: 1, max: 8, step: 0.1 });
-  folder.addInput(params, "begin_fade", { min: 1, max: 50, step: 1 });
-  folder.addInput(params, "full_fade", { min: 1, max: 50, step: 1 });
+  folder.addInput(state, "originX", { min: 1, max: 1024, step: 1 });
+  folder.addInput(state, "originY", { min: 1, max: 1024, step: 1 });
+  folder.addInput(state, "speedY", { min: 0.01, max: 1, step: 0.01 });
+  folder.addInput(state, "speedC", { min: 1, max: 255, step: 1 });
+  folder.addInput(state, "speedSin", { min: 1, max: 10, step: 0.1 });
+  folder.addInput(state, "fadeBegin", { min: 1, max: 50, step: 1 });
+  folder.addInput(state, "fadeFull", { min: 1, max: 50, step: 1 });
+  folder.addInput(state, "fillTops");
+  folder.addInput(state, "fillSides");
+  folder.addInput(state, "background", {picker: 'inline', expanded: true});
 };
 
 createPane();
