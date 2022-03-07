@@ -3,7 +3,9 @@ const math = require('canvas-sketch-util/math');
 const color = require('canvas-sketch-util/color');
 const tweakpane = require('tweakpane');
 const intersectLineCircle = require('canvas-sketch-util/lib/clip/clip-line-to-circle');
+import { isoProjectXY, renderFilledTile, renderEmptyTile } from './sbutils.mjs';
 
+// const sbutils = require('.\sbutils.js');
 // const random = require('canvas-sketch-util/random');
 // const rgbaToHex = require('canvas-sketch-util/lib/rgba-to-hex');
 
@@ -12,37 +14,27 @@ const settings = {
   animate: true,
 };
 
-const tileTop = {
-  plots: [
-    [0, -1],
-    [1, 0],
-    [0, 1],
-    [-1, 0],
-  ],
-  fillStyle: color.style([255, 0, 0]),
-  strokeStyle: color.style([0, 0, 0]),
+const tilePlots = {
+  top: [[0, -1], [1, 0], [0, 1], [-1, 0],],
+  left: [[-1, -1], [-1, -0.6], [0, 0.4], [0, 0],],
+  right: [[1, -1], [1, -0.6], [0, 0.4], [0, 0],],
 };
 
-const tileLeft = {
-  plots: [
-    [-1, -1],
-    [-1, -0.6],
-    [0, 0.4],
-    [0, 0],
-  ],
-  fillStyle: color.style([100, 100, 100]),
-  strokeStyle: color.style([0, 0, 0]),
+const tileFills = {
+  left: color.style([100, 100, 100]),
+  right: color.style([200, 200, 200]),
+}
+
+let filledTiles = {
+  top: [],
+  left: null,
+  right: null,
 };
 
-const tileRight = {
-  plots: [
-    [1, -1],
-    [1, -0.6],
-    [0, 0.4],
-    [0, 0],
-  ],
-  fillStyle: color.style([200, 200, 200]),
-  strokeStyle: color.style([0, 0, 0]),
+let emptyTiles = {
+  top: [],
+  left: null,
+  right: null,
 };
 
 let tiles = [];
@@ -50,6 +42,9 @@ let tiles = [];
 const state = {
   rows: 40,
   cols: 10,
+  rowsLast: 40,
+
+  tileSize: 100,
 
   originX: 238,
   originY: 1,
@@ -75,12 +70,14 @@ const sketch = () => {
   const numTiles = state.rows * state.cols;
   tiles = Array(numTiles);
 
+  renderTiles();
+
   return ({ context, width, height, frame }) => {
     context.fillStyle = state.background;
     context.fillRect(0, 0, width, height);
 
-    originX = width + state.originX;
-    originY = state.originY;
+    const originX = width + state.originX;
+    const originY = state.originY;
 
     // Move tileHeighte Y offset by tileHeighter speed to animate tile placement
     // Positive values move tiles from upper right to lower left
@@ -105,7 +102,24 @@ const sketch = () => {
   };
 };
 
+const renderTiles = () => {
+  const w = state.tileSize;
+  const h = (state.tileSize * 0.5);
+
+  for (let i = 0; i < 256; i++) {
+    filledTiles.top.push(renderFilledTile(w, h, color.style([i, 0, 0]), ...tilePlots.top));
+    emptyTiles.top.push(renderEmptyTile(w, h, ...tilePlots.top));
+  };
+
+  filledTiles.left = renderFilledTile(w, h, tileFills.left, ...tilePlots.left);
+  filledTiles.right = renderFilledTile(w, h, tileFills.right, ...tilePlots.right);
+
+  emptyTiles.left = renderEmptyTile(w, h, ...tilePlots.left);
+  emptyTiles.right = renderEmptyTile(w, h, ...tilePlots.right);
+};
+
 const bumpTiles = (frame) => {
+  if (state.rows != state.rowsLast) { console.log(`num tiles ${tiles.length}`); };
   const numTiles = state.rows * state.cols;
 
   const keep_rows = numTiles - (numTiles % state.cols);
@@ -116,7 +130,10 @@ const bumpTiles = (frame) => {
   state.color += state.speedC;
   const z = Math.sin(math.degToRad(frame));
 
-  if (state.color <= 0 || state.color >= 255) { state.speedC *= -1; }
+  if (state.color <= 0 || state.color >= 255) {
+    state.speedC *= -1;
+    state.color = math.clamp(state.color, 0, 255);
+  }
 
   const s = Math.sin(math.degToRad(frame * state.speedSin))
   const s1 = Math.round(math.mapRange(s, -1, 1, 0, state.cols - 1));
@@ -141,11 +158,9 @@ class Tile {
 
   draw(context, originX, originY, tileX, tileY) {
 
-    const tilewidth = 100 / 2;
-    const tileHeight = 50 / 2;
-
-    const x = originX + (tileX * tilewidth) - (tileY * tilewidth);
-    const y = originY + (tileX * tileHeight) + (tileY * tileHeight);
+    const pos = isoProjectXY(originX, originY, tileX, tileY, state.tileSize, state.tileSize * 0.5);
+    const w = state.tileSize;
+    const h = state.tileSize / 2;
 
     let alpha = 1.0;
     const range = state.fadeFull - state.fadeBegin;
@@ -160,67 +175,26 @@ class Tile {
 
     context.save();
     context.globalAlpha = alpha;
-    context.translate(x, y);
+    context.translate(pos.x, pos.y);
     context.translate(0, this.z);
 
     context.translate(0, 25);
     if (state.fillSides) {
-      fillPoly(context, tileLeft.fillStyle, 100, 50, ...tileLeft.plots);
-      fillPoly(context, tileRight.fillStyle, 100, 50, ...tileRight.plots);
+      context.drawImage(filledTiles.left.canvas, w, h);
+      context.drawImage(filledTiles.right.canvas, w, h);
     } else {
-      drawPoly(context, 100, 50, ...tileLeft.plots);
-      drawPoly(context, 100, 50, ...tileRight.plots);
+      context.drawImage(emptyTiles.left.canvas, w, h);
+      context.drawImage(emptyTiles.right.canvas, w, h);
     }
     context.translate(0, -25);
     if (state.fillTops) {
-      fillPoly(context, color.style([this.c, 0, 0]), 100, 50, ...tileTop.plots);
+      context.drawImage(filledTiles.top[this.c].canvas, w, h);
     } else {
-      drawPoly(context, 100, 50, ...tileTop.plots);
+      context.drawImage(emptyTiles.top[0].canvas, w, h);
     }
 
     context.restore();
   }
-};
-
-const drawPoly = (context, scaleX, scaleY, ...plots) => {
-
-  if (plots.length < 2) { return; };
-
-  context.beginPath();
-  const x = plots[0][0] * scaleX * 0.5;
-  const y = plots[0][1] * scaleY * 0.5;
-
-  context.moveTo(x, y);
-  for (let i = 1; i < plots.length; i++) {
-    const x = plots[i][0] * scaleX * 0.5;
-    const y = plots[i][1] * scaleY * 0.5;
-    context.lineTo(x, y);
-  }
-  context.closePath();
-  context.stroke();
-};
-
-const fillPoly = (context, color, scaleX, scaleY, ...plots) => {
-
-  if (plots.length < 2) { return; };
-
-  context.beginPath();
-
-  const x = plots[0][0] * scaleX * 0.5;
-  const y = plots[0][1] * scaleY * 0.5;
-
-  context.moveTo(x, y);
-  for (let i = 1; i < plots.length; i++) {
-    const x = plots[i][0] * scaleX * 0.5;
-    const y = plots[i][1] * scaleY * 0.5;
-    context.lineTo(x, y);
-  }
-  context.fillStyle = color;
-  context.fill();
-  context.linewidth = 1;
-  context.strokeStyle = 'black';
-  context.stroke();
-
 };
 
 const createPane = () => {
@@ -228,16 +202,18 @@ const createPane = () => {
   let folder;
 
   folder = pane.addFolder({ title: "Tiles" });
-  folder.addInput(state, "originX", { min: 1, max: 1024, step: 1 });
-  folder.addInput(state, "originY", { min: 1, max: 1024, step: 1 });
+  folder.addInput(state, "rows", { min: 1, max: 1000, step: 1 });
+  folder.addInput(state, "originX", { min: -1024, max: 1024, step: 2 });
+  folder.addInput(state, "originY", { min: -1024, max: 1024, step: 2 });
+  folder.addInput(state, "tileSize", { min: 1, max: 100, step: 1 });
   folder.addInput(state, "speedY", { min: 0.01, max: 1, step: 0.01 });
   folder.addInput(state, "speedC", { min: 1, max: 255, step: 1 });
   folder.addInput(state, "speedSin", { min: 1, max: 10, step: 0.1 });
-  folder.addInput(state, "fadeBegin", { min: 1, max: 50, step: 1 });
-  folder.addInput(state, "fadeFull", { min: 1, max: 50, step: 1 });
+  folder.addInput(state, "fadeBegin", { min: 1, max: 100, step: 1 });
+  folder.addInput(state, "fadeFull", { min: 1, max: 100, step: 1 });
   folder.addInput(state, "fillTops");
   folder.addInput(state, "fillSides");
-  folder.addInput(state, "background", {picker: 'inline', expanded: true});
+  folder.addInput(state, "background", { picker: 'inline', expanded: true });
 };
 
 createPane();
