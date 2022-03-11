@@ -72,4 +72,23 @@ function fillPoly(context, color, scaleX, scaleY, ...plots) {
 
 };
 
-export { isoProjectXY, renderFilledTile, renderEmptyTile };
+function rotate2D(angleD, ...plots) {
+  let rPlots = [];
+  const rad = angleD * Math.PI / 180;
+
+  for (let i=0; i<plots.length; i++) {
+    const rX = plots[i][0] * Math.cos(rad) - plots[i][1] * Math.sin(rad);
+    const rY = plots[i][1] * Math.cos(rad) + plots[i][0] * Math.sin(rad);
+    rPlots.push([rX, rY]);
+  };
+  return rPlots;
+};
+
+export { 
+  isoProjectXY, 
+  renderFilledTile, 
+  renderEmptyTile, 
+  drawPoly, 
+  fillPoly,
+  rotate2D, 
+};

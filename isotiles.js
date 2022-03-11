@@ -5,9 +5,6 @@ const tweakpane = require('tweakpane');
 const intersectLineCircle = require('canvas-sketch-util/lib/clip/clip-line-to-circle');
 import { isoProjectXY, renderFilledTile, renderEmptyTile } from './sbutils.mjs';
 
-// const sbutils = require('.\sbutils.js');
-// const random = require('canvas-sketch-util/random');
-// const rgbaToHex = require('canvas-sketch-util/lib/rgba-to-hex');
 
 const settings = {
   dimensions: [1080, 1080],
